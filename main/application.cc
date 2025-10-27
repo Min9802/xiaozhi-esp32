@@ -173,6 +173,8 @@ void Application::CheckNewVersion(Ota& ota) {
         display->SetStatus(Lang::Strings::ACTIVATION);
         // Activation code is shown to the user and waiting for the user to input
         if (ota.HasActivationCode()) {
+            ESP_LOGI(TAG, "Activation Code: %s", ota.GetActivationCode().c_str());
+            ESP_LOGI(TAG, "Activation Message: %s", ota.GetActivationMessage().c_str());
             ShowActivationCode(ota.GetActivationCode(), ota.GetActivationMessage());
         }
 
@@ -196,6 +198,8 @@ void Application::CheckNewVersion(Ota& ota) {
 }
 
 void Application::ShowActivationCode(const std::string& code, const std::string& message) {
+    ESP_LOGI(TAG, "ShowActivationCode called - Code: '%s', Message: '%s'", code.c_str(), message.c_str());
+    
     struct digit_sound {
         char digit;
         const std::string_view& sound;
@@ -216,13 +220,19 @@ void Application::ShowActivationCode(const std::string& code, const std::string&
     // This sentence uses 9KB of SRAM, so we need to wait for it to finish
     Alert(Lang::Strings::ACTIVATION, message.c_str(), "link", Lang::Sounds::OGG_ACTIVATION);
 
+    ESP_LOGI(TAG, "Playing sounds for activation code digits...");
     for (const auto& digit : code) {
+        ESP_LOGI(TAG, "Processing digit: '%c'", digit);
         auto it = std::find_if(digit_sounds.begin(), digit_sounds.end(),
             [digit](const digit_sound& ds) { return ds.digit == digit; });
         if (it != digit_sounds.end()) {
+            ESP_LOGI(TAG, "Playing sound for digit: '%c'", digit);
             audio_service_.PlaySound(it->sound);
+        } else {
+            ESP_LOGW(TAG, "No sound found for digit: '%c'", digit);
         }
     }
+    ESP_LOGI(TAG, "ShowActivationCode completed");
 }
 
 void Application::Alert(const char* status, const char* message, const char* emotion, const std::string_view& sound) {
@@ -865,6 +875,101 @@ void Application::SetAecMode(AecMode mode) {
             protocol_->CloseAudioChannel();
         }
     });
+}
+// Nhận dữ liệu âm thanh bên ngoài (chẳng hạn như phát lại nhạc)
+void Application::AddAudioData(AudioStreamPacket &&packet)
+{
+    auto codec = Board::GetInstance().GetAudioCodec();
+    if (device_state_ == kDeviceStateIdle && codec->output_enabled())
+    {
+        if (packet.payload.size() >= 2)
+        {
+            size_t num_samples = packet.payload.size() / sizeof(int16_t);
+            std::vector<int16_t> pcm_data(num_samples);
+            memcpy(pcm_data.data(), packet.payload.data(), packet.payload.size());
+
+            // Kiểm tra xem tỷ lệ lấy sample có khớp không và thực hiện lấy mẫu lại đơn giản nếu chúng không khớp
+            if (packet.sample_rate != codec->output_sample_rate())
+            {
+                // Xác minh tham số tốc độ lấy sample
+                if (packet.sample_rate <= 0 || codec->output_sample_rate() <= 0)
+                {
+                    ESP_LOGE(TAG, "Invalid sample rates: %d -> %d",
+                             packet.sample_rate, codec->output_sample_rate());
+                    return;
+                }
+
+                std::vector<int16_t> resampled;
+
+                if (packet.sample_rate > codec->output_sample_rate())
+                {
+                    ESP_LOGI(TAG, "Music playback: Change the sampling rate from %d Hz Switch to %d Hz",
+                             codec->output_sample_rate(), packet.sample_rate);
+
+                    // chuyển đổi tốc độ lấy sample linh hoạt
+                    if (codec->SetOutputSampleRate(packet.sample_rate))
+                    {
+                        ESP_LOGI(TAG, "Successfully switched to music playback sampling rate: %d Hz", packet.sample_rate);
+                    }
+                    else
+                    {
+                        ESP_LOGW(TAG, "Unable to switch sampling rate, continuing with current sampling rate: %d Hz", codec->output_sample_rate());
+                    }
+                }
+                else
+                {
+                    // Nội suy tuyến tính
+                    float upsample_ratio = codec->output_sample_rate() / static_cast<float>(packet.sample_rate);
+                    size_t expected_size = static_cast<size_t>(pcm_data.size() * upsample_ratio + 0.5f);
+                    resampled.reserve(expected_size);
+
+                    for (size_t i = 0; i < pcm_data.size(); ++i)
+                    {
+                        // Thêm sample ban đầu
+                        resampled.push_back(pcm_data[i]);
+
+                        // Tính toán số lượng sample cần thiết cho phép nội suy
+                        int interpolation_count = static_cast<int>(upsample_ratio) - 1;
+                        if (interpolation_count > 0 && i + 1 < pcm_data.size())
+                        {
+                            int16_t current = pcm_data[i];
+                            int16_t next = pcm_data[i + 1];
+                            for (int j = 1; j <= interpolation_count; ++j)
+                            {
+                                float t = static_cast<float>(j) / (interpolation_count + 1);
+                                int16_t interpolated = static_cast<int16_t>(current + (next - current) * t);
+                                resampled.push_back(interpolated);
+                            }
+                        }
+                        else if (interpolation_count > 0)
+                        {
+                            // Sample cuối cùng, lặp lại trực tiếp
+                            for (int j = 1; j <= interpolation_count; ++j)
+                            {
+                                resampled.push_back(pcm_data[i]);
+                            }
+                        }
+                    }
+
+                    ESP_LOGI(TAG, "Upsampled %d -> %d samples (ratio: %.2f)",
+                             pcm_data.size(), resampled.size(), upsample_ratio);
+                }
+
+                pcm_data = std::move(resampled);
+            }
+
+            // Đảm bảo đầu ra âm thanh được bật
+            if (!codec->output_enabled())
+            {
+                codec->EnableOutput(true);
+            }
+
+            // Gửi dữ liệu PCM đến giải mã âm thanh
+            codec->OutputData(pcm_data);
+
+            audio_service_.UpdateOutputTimestamp();
+        }
+    }
 }
 
 void Application::PlaySound(const std::string_view& sound) {

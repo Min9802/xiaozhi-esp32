@@ -676,6 +676,10 @@ void AudioService::SetModelsList(srmodel_list_t* models_list) {
         });
     }
 }
+void AudioService::UpdateOutputTimestamp()
+{
+    last_output_time_ = std::chrono::steady_clock::now();
+}
 
 bool AudioService::IsAfeWakeWord() {
 #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32P4
