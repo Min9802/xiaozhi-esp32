@@ -11,7 +11,7 @@ static const char* TAG = "OttoMovements";
 Otto::Otto() {
     is_otto_resting_ = false;
     has_hands_ = false;
-    // 初始化所有舵机管脚为-1（未连接）
+    // Initialize all servo pins to -1 (not connected).
     for (int i = 0; i < SERVO_COUNT; i++) {
         servo_pins_[i] = -1;
         servo_trim_[i] = 0;
@@ -260,7 +260,7 @@ void Otto::Jump(float steps, int period) {
 //--    * steps:  Number of steps
 //--    * T : Period
 //--    * Dir: Direction: FORWARD / BACKWARD
-//--    * amount: 手部摆动幅度, 0表示不摆动
+//--    * amount: The amplitude of hand swing; 0 indicates no swing.
 //---------------------------------------------------------
 void Otto::Walk(float steps, int period, int dir, int amount) {
     //-- Oscillator parameters for walking
@@ -274,15 +274,15 @@ void Otto::Walk(float steps, int period, int dir, int amount) {
     int O[SERVO_COUNT] = {0, 0, 5, -5, HAND_HOME_POSITION - 90, HAND_HOME_POSITION};
     double phase_diff[SERVO_COUNT] = {0, 0, DEG2RAD(dir * -90), DEG2RAD(dir * -90), 0, 0};
 
-    // 如果amount>0且有手部舵机，设置手部振幅和相位
+    // If amount > 0 and there are hand servos, set hand swing amplitude and phase
     if (amount > 0 && has_hands_) {
-        // 手臂振幅使用传入的amount参数
+        // Hand swing amplitude uses the passed amount parameter
         A[LEFT_HAND] = amount;
         A[RIGHT_HAND] = amount;
 
-        // 左手与右腿同相，右手与左腿同相，使得机器人走路时手臂自然摆动
-        phase_diff[LEFT_HAND] = phase_diff[RIGHT_LEG];  // 左手与右腿同相
-        phase_diff[RIGHT_HAND] = phase_diff[LEFT_LEG];  // 右手与左腿同相
+        // Left hand is in phase with right leg, right hand is in phase with left leg, allowing the robot's arms to swing naturally while walking
+        phase_diff[LEFT_HAND] = phase_diff[RIGHT_LEG];  // Left hand is in phase with right leg
+        phase_diff[RIGHT_HAND] = phase_diff[LEFT_LEG];  // Right hand is in phase with left leg
     } else {
         A[LEFT_HAND] = 0;
         A[RIGHT_HAND] = 0;
@@ -298,7 +298,7 @@ void Otto::Walk(float steps, int period, int dir, int amount) {
 //--   * Steps: Number of steps
 //--   * T: Period
 //--   * Dir: Direction: LEFT / RIGHT
-//--   * amount: 手部摆动幅度, 0表示不摆动
+//--   * amount: Hand swing amplitude; 0 indicates no swing
 //---------------------------------------------------------
 void Otto::Turn(float steps, int period, int dir, int amount) {
     //-- Same coordination than for walking (see Otto::walk)
@@ -318,15 +318,15 @@ void Otto::Turn(float steps, int period, int dir, int amount) {
         A[1] = 30;
     }
 
-    // 如果amount>0且有手部舵机，设置手部振幅和相位
+    // If amount > 0 and there are hand servos, set hand swing amplitude and phase
     if (amount > 0 && has_hands_) {
-        // 手臂振幅使用传入的amount参数
+        // Hand swing amplitude uses the passed amount parameter
         A[LEFT_HAND] = amount;
         A[RIGHT_HAND] = amount;
 
-        // 转向时手臂摆动相位：左手与左腿同相，右手与右腿同相，增强转向效果
-        phase_diff[LEFT_HAND] = phase_diff[LEFT_LEG];    // 左手与左腿同相
-        phase_diff[RIGHT_HAND] = phase_diff[RIGHT_LEG];  // 右手与右腿同相
+        // Hand swing phase: left hand is in phase with left leg, right hand is in phase with right leg, enhancing turning effect
+        phase_diff[LEFT_HAND] = phase_diff[LEFT_LEG];    // Left hand is in phase with left leg
+        phase_diff[RIGHT_HAND] = phase_diff[RIGHT_LEG];  // Right hand is in phase with right leg
     } else {
         A[LEFT_HAND] = 0;
         A[RIGHT_HAND] = 0;
@@ -589,10 +589,10 @@ void Otto::Flapping(float steps, int period, int height, int dir) {
 }
 
 //---------------------------------------------------------
-//-- 手部动作: 举手
+//-- Hand gesture: Raise hand
 //--  Parameters:
-//--    period: 动作时间
-//--    dir: 方向 1=左手, -1=右手, 0=双手
+//--    period: Action duration
+//--    dir: Direction 1=Left hand, -1=Right hand, 0=Both hands
 //---------------------------------------------------------
 void Otto::HandsUp(int period, int dir) {
     if (!has_hands_) {
@@ -617,10 +617,10 @@ void Otto::HandsUp(int period, int dir) {
 }
 
 //---------------------------------------------------------
-//-- 手部动作: 双手放下
+//-- Hand gesture: Lower hands
 //--  Parameters:
-//--    period: 动作时间
-//--    dir: 方向 1=左手, -1=右手, 0=双手
+//--    period: Action duration
+//--    dir: Direction 1=Left hand, -1=Right hand, 0=Both hands
 //---------------------------------------------------------
 void Otto::HandsDown(int period, int dir) {
     if (!has_hands_) {
@@ -638,11 +638,10 @@ void Otto::HandsDown(int period, int dir) {
     MoveServos(period, target);
 }
 
-//---------------------------------------------------------
-//-- 手部动作: 挥手
-//--  Parameters:
-//--    period: 动作周期
-//--    dir: 方向 LEFT/RIGHT/BOTH
+// Hand gesture: Wave
+//  Parameters:
+//    period: Action duration
+//    dir: Direction LEFT/RIGHT/BOTH
 //---------------------------------------------------------
 void Otto::HandWave(int period, int dir) {
     if (!has_hands_) {
@@ -676,7 +675,7 @@ void Otto::HandWave(int period, int dir) {
     MoveServos(300, current_positions);
     vTaskDelay(pdMS_TO_TICKS(300));
 
-    // 左右摆动5次
+    // Swing left and right 5 times
     for (int i = 0; i < 5; i++) {
         if (servo_index == LEFT_HAND) {
             current_positions[servo_index] = position - 30;
@@ -703,9 +702,9 @@ void Otto::HandWave(int period, int dir) {
 }
 
 //---------------------------------------------------------
-//-- 手部动作: 双手同时挥手
+//-- Hand gesture: Wave both hands simultaneously
 //--  Parameters:
-//--    period: 动作周期
+//--    period: Action duration
 //---------------------------------------------------------
 void Otto::HandWaveBoth(int period) {
     if (!has_hands_) {
@@ -728,14 +727,14 @@ void Otto::HandWaveBoth(int period) {
     current_positions[RIGHT_HAND] = right_position;
     MoveServos(300, current_positions);
 
-    // 左右摆动5次
+    // Swing left and right 5 times
     for (int i = 0; i < 5; i++) {
-        // 波浪向左
+        // Wave left
         current_positions[LEFT_HAND] = left_position - 30;
         current_positions[RIGHT_HAND] = right_position + 30;
         MoveServos(period / 10, current_positions);
 
-        // 波浪向右
+        // Wave right
         current_positions[LEFT_HAND] = left_position + 30;
         current_positions[RIGHT_HAND] = right_position - 30;
         MoveServos(period / 10, current_positions);

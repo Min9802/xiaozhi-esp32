@@ -12,14 +12,14 @@
 
 #define TAG "OttoEmojiDisplay"
 
-// 表情映射表 - 将原版21种表情映射到现有6个GIF
+// Emoji Mapping Table - Maps the original 21 emojis to 6 existing GIFs
 const OttoEmojiDisplay::EmotionMap OttoEmojiDisplay::emotion_maps_[] = {
-    // 中性/平静类表情 -> staticstate
+    // Neutral/Calm Emojis -> staticstate
     {"neutral", &staticstate},
     {"relaxed", &staticstate},
     {"sleepy", &staticstate},
 
-    // 积极/开心类表情 -> happy
+    // Positive/Happy Emojis -> happy
     {"happy", &happy},
     {"laughing", &happy},
     {"funny", &happy},
@@ -31,23 +31,23 @@ const OttoEmojiDisplay::EmotionMap OttoEmojiDisplay::emotion_maps_[] = {
     {"kissy", &happy},
     {"silly", &happy},
 
-    // 悲伤类表情 -> sad
+    // Sad Emojis -> sad
     {"sad", &sad},
     {"crying", &sad},
 
-    // 愤怒类表情 -> anger
+    // Angry Emojis -> anger
     {"angry", &anger},
 
-    // 惊讶类表情 -> scare
+    // Surprised expressions -> scare
     {"surprised", &scare},
     {"shocked", &scare},
 
-    // 思考/困惑类表情 -> buxue
+    // Thinking/Confused Emojis -> buxue
     {"thinking", &buxue},
     {"confused", &buxue},
     {"embarrassed", &buxue},
 
-    {nullptr, nullptr}  // 结束标记
+    {nullptr, nullptr} // End marker
 };
 
 OttoEmojiDisplay::OttoEmojiDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
@@ -125,13 +125,13 @@ void OttoEmojiDisplay::SetEmotion(const char* emotion) {
     for (const auto& map : emotion_maps_) {
         if (map.name && strcmp(map.name, emotion) == 0) {
             lv_gif_set_src(emotion_gif_, map.gif);
-            ESP_LOGI(TAG, "设置表情: %s", emotion);
+            ESP_LOGI(TAG, "Set emoticons: %s", emotion);
             return;
         }
     }
 
     lv_gif_set_src(emotion_gif_, &staticstate);
-    ESP_LOGI(TAG, "未知表情'%s'，使用默认", emotion);
+    ESP_LOGI(TAG, "Unknown emoticon '%s', using default", emotion);
 }
 
 void OttoEmojiDisplay::SetChatMessage(const char* role, const char* content) {
@@ -148,5 +148,5 @@ void OttoEmojiDisplay::SetChatMessage(const char* role, const char* content) {
     lv_label_set_text(chat_message_label_, content);
     lv_obj_remove_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
 
-    ESP_LOGI(TAG, "设置聊天消息 [%s]: %s", role, content);
+    ESP_LOGI(TAG, "Set chat message [%s]: %s", role, content);
 }
