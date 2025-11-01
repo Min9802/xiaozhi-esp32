@@ -60,7 +60,7 @@ private:
 
         while (true) {
             if (xQueueReceive(controller->action_queue_, &params, pdMS_TO_TICKS(1000)) == pdTRUE) {
-                ESP_LOGI(TAG, "执行动作: %d", params.action_type);
+                ESP_LOGI(TAG, "Execute action: %d", params.action_type);
                 controller->is_action_in_progress_ = true;
 
                 switch (params.action_type) {
@@ -146,11 +146,11 @@ private:
     void QueueAction(int action_type, int steps, int speed, int direction, int amount) {
         // 检查手部动作
         if ((action_type >= ACTION_HANDS_UP && action_type <= ACTION_HAND_WAVE) && !has_hands_) {
-            ESP_LOGW(TAG, "尝试执行手部动作，但机器人没有配置手部舵机");
+            ESP_LOGW(TAG, "Attempts were made to perform hand movements, but the robot was not equipped with hand servos.");
             return;
         }
 
-        ESP_LOGI(TAG, "动作控制: 类型=%d, 步数=%d, 速度=%d, 方向=%d, 幅度=%d", action_type, steps,
+        ESP_LOGI(TAG, "Action control: type=%d, steps=%d, speed=%d, direction=%d, amount=%d", action_type, steps,
                  speed, direction, amount);
 
         OttoActionParams params = {action_type, steps, speed, direction, amount};
@@ -168,7 +168,7 @@ private:
         int left_hand = settings.GetInt("left_hand", 0);
         int right_hand = settings.GetInt("right_hand", 0);
 
-        ESP_LOGI(TAG, "从NVS加载微调设置: 左腿=%d, 右腿=%d, 左脚=%d, 右脚=%d, 左手=%d, 右手=%d",
+        ESP_LOGI(TAG, "Load fine-tuning settings from NVS: left leg=%d, right leg=%d, left foot=%d, right foot=%d, left hand=%d, right hand=%d",
                  left_leg, right_leg, left_foot, right_foot, left_hand, right_hand);
 
         otto_.SetTrims(left_leg, right_leg, left_foot, right_foot, left_hand, right_hand);
@@ -180,7 +180,7 @@ public:
                    RIGHT_HAND_PIN);
 
         has_hands_ = (LEFT_HAND_PIN != -1 && RIGHT_HAND_PIN != -1);
-        ESP_LOGI(TAG, "Otto机器人初始化%s手部舵机", has_hands_ ? "带" : "不带");
+        ESP_LOGI(TAG, "Otto robot initialization %s hand servos", has_hands_ ? "with" : "without");
 
         LoadTrimsFromNVS();
 

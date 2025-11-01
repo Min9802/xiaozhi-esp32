@@ -75,7 +75,7 @@ void OttoEmojiDisplay::InitializeOttoEmojis() {
     // 设置默认表情为staticstate
     SetEmotion("staticstate");
 
-    ESP_LOGI(TAG, "Otto GIF表情初始化完成");
+    ESP_LOGI(TAG, "Otto GIF emoticon initialization complete");
 }
 
 void OttoEmojiDisplay::SetupChatLabel() {
