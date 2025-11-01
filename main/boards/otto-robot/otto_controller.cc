@@ -370,12 +370,13 @@ public:
 
         mcp_server.AddTool(
             "self.otto.set_trim",
-            "Calibrate the position of a single servo. Set the trim parameters of the specified servo to adjust Otto's initial standing posture. The settings will be permanently saved."
+            "Calibrate the position of a single servo. Set the fine-tuning parameters for a specified servo to adjust the robot's initial standing posture; the settings will be permanently saved."
             "servo_type: Servo type(left_leg/right_leg/left_foot/right_foot/left_hand/right_hand); "
-            "trim_value: Trim value(-50 to 50 degrees)",
+            "trim_value: Fine-tuning value(-50 to 50 degrees)",
             PropertyList({Property("servo_type", kPropertyTypeString, "left_leg"),
                           Property("trim_value", kPropertyTypeInteger, 0, -50, 50)}),
-            [this](const PropertyList& properties) -> ReturnValue {
+            [this](const PropertyList &properties) -> ReturnValue
+            {
                 std::string servo_type = properties["servo_type"].value<std::string>();
                 int trim_value = properties["trim_value"].value<int>();
 
@@ -391,31 +392,46 @@ public:
                 int right_hand = settings.GetInt("right_hand", 0);
 
                 // Update the trim value of the specified servo
-                if (servo_type == "left_leg") {
+                if (servo_type == "left_leg")
+                {
                     left_leg = trim_value;
                     settings.SetInt("left_leg", left_leg);
-                } else if (servo_type == "right_leg") {
+                }
+                else if (servo_type == "right_leg")
+                {
                     right_leg = trim_value;
                     settings.SetInt("right_leg", right_leg);
-                } else if (servo_type == "left_foot") {
+                }
+                else if (servo_type == "left_foot")
+                {
                     left_foot = trim_value;
                     settings.SetInt("left_foot", left_foot);
-                } else if (servo_type == "right_foot") {
+                }
+                else if (servo_type == "right_foot")
+                {
                     right_foot = trim_value;
                     settings.SetInt("right_foot", right_foot);
-                } else if (servo_type == "left_hand") {
-                    if (!has_hands_) {
+                }
+                else if (servo_type == "left_hand")
+                {
+                    if (!has_hands_)
+                    {
                         return "Error: Robot has no configured hand servos";
                     }
                     left_hand = trim_value;
                     settings.SetInt("left_hand", left_hand);
-                } else if (servo_type == "right_hand") {
-                    if (!has_hands_) {
+                }
+                else if (servo_type == "right_hand")
+                {
+                    if (!has_hands_)
+                    {
                         return "Error: The robot is not equipped with a hand servo motor.";
                     }
                     right_hand = trim_value;
                     settings.SetInt("right_hand", right_hand);
-                } else {
+                }
+                else
+                {
                     return "Error: Invalid servo type. Please use: left_leg, right_leg, left_foot, "
                            "right_foot, left_hand, right_hand";
                 }
