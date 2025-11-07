@@ -113,14 +113,14 @@ private:
                                         int amplitude[SERVO_COUNT] = {0};
                                         int center_angle[SERVO_COUNT] = {0};
                                         double phase_diff[SERVO_COUNT] = {0};
-                                        int period = 500;  // 默认周期500毫秒
-                                        float steps = 5.0;  // 默认步数5.0
+                                        int period = 300;  // 默认周期300毫秒
+                                        float steps = 8.0;  // 默认步数8.0
                                         
                                         const char* servo_names[] = {"ll", "rl", "lf", "rf", "lh", "rh"};
                                         
-                                        // 读取振幅（短键名 "a"），默认20度
+                                        // 读取振幅（短键名 "a"），默认0度
                                         for (int j = 0; j < SERVO_COUNT; j++) {
-                                            amplitude[j] = 20;  // 默认振幅20度
+                                            amplitude[j] = 0;  // 默认振幅0度
                                         }
                                         cJSON* amp_item = cJSON_GetObjectItem(osc_item, "a");
                                         if (cJSON_IsObject(amp_item)) {
@@ -528,302 +528,171 @@ public:
 
         ESP_LOGI(TAG, "Start registering MCP tools...");
 
-        // Basic movement actions
-        mcp_server.AddTool("self.otto.walk_forward",
-                           "Walking. Steps: Steps taken(1-100); speed: Walking speed(500-1500, lower is faster); "
-                           "direction: Walking direction(-1=backward, 1=forward); arm_swing: Arm swing angle(0-170 degrees)",
-                           PropertyList({Property("steps", kPropertyTypeInteger, 3, 1, 100),
-                                         Property("speed", kPropertyTypeInteger, 1000, 500, 1500),
-                                         Property("arm_swing", kPropertyTypeInteger, 50, 0, 170),
-                                         Property("direction", kPropertyTypeInteger, 1, -1, 1)}),
+        // 统一动作工具（除了舵机序列外的所有动作）
+        mcp_server.AddTool("self.otto.action",
+                           "Execute the robot action. action: action name; provide corresponding parameters according to the action type: direction: direction, 1=forward/turn left, -1=backward/turn right; 0=left and right at the same time"
+                           "steps: number of action steps, 1-100; speed: action speed, 100-3000, the smaller the value, the faster; amount: range of action, 0-170; arm_swing: arm swing range, 0-170;"
+                           "Basic movements: walk (walking, steps/speed/direction/arm_swing required), turn (turning, steps/speed/direction/arm_swing required), jump (jumping, steps/speed required),"
+                           "swing (swing, requires steps/speed/amount), moonwalk (moonwalk, requires steps/speed/direction/amount), bend (bend, requires steps/speed/direction),"
+                           "shake_leg (shake leg, steps/speed/direction required), updown (up and down movement, steps/speed/amount required), whirlwind_leg (whirlwind leg, steps/speed/amount required);"
+                           "Fixed actions: sit (sit down), showcase (show action), home (reset);"
+                           "Hand movements (requires hand servo): hands_up (raises hand, requires speed/direction), hands_down (lets go, requires speed/direction), hand_wave (waves, requires direction),"
+                           "windmill (big windmill, steps/speed/amount required), takeoff (takeoff, steps/speed/amount required), fitness (fitness, steps/speed/amount required),"
+                           "greeting (greeting, direction/steps required), shy (shy, direction/steps required), radio_calisthenics (radio gymnastics), magic_circle (magic circle of love)",
+                           PropertyList({
+                               Property("action", kPropertyTypeString, "sit"),
+                               Property("steps", kPropertyTypeInteger, 3, 1, 100),
+                               Property("speed", kPropertyTypeInteger, 700, 100, 3000),
+                               Property("direction", kPropertyTypeInteger, 1, -1, 1),
+                               Property("amount", kPropertyTypeInteger, 30, 0, 170),
+                               Property("arm_swing", kPropertyTypeInteger, 50, 0, 170)
+                           }),
                            [this](const PropertyList& properties) -> ReturnValue {
+                               std::string action = properties["action"].value<std::string>();
+                               // 所有参数都有默认值，直接访问即可
                                int steps = properties["steps"].value<int>();
                                int speed = properties["speed"].value<int>();
+                               int direction = properties["direction"].value<int>();
+                               int amount = properties["amount"].value<int>();
                                int arm_swing = properties["arm_swing"].value<int>();
-                               int direction = properties["direction"].value<int>();
-                               QueueAction(ACTION_WALK, steps, speed, direction, arm_swing);
-                               return true;
-                           });
 
-        mcp_server.AddTool("self.otto.turn_left",
-                           "Turning. Steps: Steps taken(1-100); speed: Turning speed(500-1500, lower is faster); "
-                           "direction: Turning direction(1=left, -1=right); arm_swing: Arm swing angle(0-170 degrees)",
-                           PropertyList({Property("steps", kPropertyTypeInteger, 3, 1, 100),
-                                         Property("speed", kPropertyTypeInteger, 1000, 500, 1500),
-                                         Property("arm_swing", kPropertyTypeInteger, 50, 0, 170),
-                                         Property("direction", kPropertyTypeInteger, 1, -1, 1)}),
-                           [this](const PropertyList& properties) -> ReturnValue {
-                               int steps = properties["steps"].value<int>();
-                               int speed = properties["speed"].value<int>();
-                               int arm_swing = properties["arm_swing"].value<int>();
-                               int direction = properties["direction"].value<int>();
-                               QueueAction(ACTION_TURN, steps, speed, direction, arm_swing);
-                               return true;
-                           });
-
-        mcp_server.AddTool("self.otto.jump",
-                           "Jumping. Steps: Steps taken(1-100); speed: Jumping speed(500-1500, lower is faster)",
-                           PropertyList({Property("steps", kPropertyTypeInteger, 1, 1, 100),
-                                         Property("speed", kPropertyTypeInteger, 1000, 500, 1500)}),
-                           [this](const PropertyList& properties) -> ReturnValue {
-                               int steps = properties["steps"].value<int>();
-                               int speed = properties["speed"].value<int>();
-                               QueueAction(ACTION_JUMP, steps, speed, 0, 0);
-                               return true;
-                           });
-
-        // Special Actions
-        mcp_server.AddTool("self.otto.swing",
-                           "Swinging. Steps: Steps taken(1-100); speed: "
-                           "Swinging speed(500-1500, lower is faster); amount: Swinging angle(0-170 degrees)",
-                           PropertyList({Property("steps", kPropertyTypeInteger, 3, 1, 100),
-                                         Property("speed", kPropertyTypeInteger, 1000, 500, 1500),
-                                         Property("amount", kPropertyTypeInteger, 30, 0, 170)}),
-                           [this](const PropertyList& properties) -> ReturnValue {
-                               int steps = properties["steps"].value<int>();
-                               int speed = properties["speed"].value<int>();
-                               int amount = properties["amount"].value<int>();
-                               QueueAction(ACTION_SWING, steps, speed, 0, amount);
-                               return true;
-                           });
-
-        mcp_server.AddTool("self.otto.moonwalk",
-                           "Moonwalking. Steps: Steps taken(1-100); speed: Speed(500-1500, lower is faster); "
-                           "direction: Direction(1=left, -1=right); amount: Amplitude(0-170 degrees)",
-                           PropertyList({Property("steps", kPropertyTypeInteger, 3, 1, 100),
-                                         Property("speed", kPropertyTypeInteger, 1000, 500, 1500),
-                                         Property("direction", kPropertyTypeInteger, 1, -1, 1),
-                                         Property("amount", kPropertyTypeInteger, 25, 0, 170)}),
-                           [this](const PropertyList& properties) -> ReturnValue {
-                               int steps = properties["steps"].value<int>();
-                               int speed = properties["speed"].value<int>();
-                               int direction = properties["direction"].value<int>();
-                               int amount = properties["amount"].value<int>();
-                               QueueAction(ACTION_MOONWALK, steps, speed, direction, amount);
-                               return true;
-                           });
-
-        mcp_server.AddTool("self.otto.bend",
-                           "Bending. Steps: Steps taken(1-100); speed: Bending speed(500-1500, lower is faster); direction: Bending direction(1=left, -1=right)",
-                           PropertyList({Property("steps", kPropertyTypeInteger, 1, 1, 100),
-                                         Property("speed", kPropertyTypeInteger, 1000, 500, 1500),
-                                         Property("direction", kPropertyTypeInteger, 1, -1, 1)}),
-                           [this](const PropertyList& properties) -> ReturnValue {
-                               int steps = properties["steps"].value<int>();
-                               int speed = properties["speed"].value<int>();
-                               int direction = properties["direction"].value<int>();
-                               QueueAction(ACTION_BEND, steps, speed, direction, 0);
-                               return true;
-                           });
-
-        mcp_server.AddTool("self.otto.shake_leg",
-                           "Shaking legs. Steps: Steps taken(1-100); speed: Shaking speed(500-1500, lower is faster); "
-                           "direction: Leg selection(1=left leg, -1=right leg)",
-                           PropertyList({Property("steps", kPropertyTypeInteger, 1, 1, 100),
-                                         Property("speed", kPropertyTypeInteger, 1000, 500, 1500),
-                                         Property("direction", kPropertyTypeInteger, 1, -1, 1)}),
-                           [this](const PropertyList& properties) -> ReturnValue {
-                               int steps = properties["steps"].value<int>();
-                               int speed = properties["speed"].value<int>();
-                               int direction = properties["direction"].value<int>();
-                               QueueAction(ACTION_SHAKE_LEG, steps, speed, direction, 0);
-                               return true;
-                           });
-
-        mcp_server.AddTool("self.otto.sit",
-                           "Sit down. No parameters needed.",
-                           PropertyList(),
-                           [this](const PropertyList &properties) -> ReturnValue
-                           {
-                               QueueAction(ACTION_SIT, 1, 0, 0, 0);
-                               return true;
-                           });
-
-        mcp_server.AddTool("self.otto.showcase",
-                           "Demonstrate actions. Perform multiple actions in sequence: walk forward 3 steps, wave, dance (calisthenics), moonwalk, sway, take off, exercise, walk backward 3 steps. No parameters required.",
-                           PropertyList(),
-                           [this](const PropertyList &properties) -> ReturnValue
-                           {
-                               QueueAction(ACTION_SHOWCASE, 1, 0, 0, 0);
-                               return true;
-                           });
-
-        mcp_server.AddTool("self.otto.updown",
-                           "Up and down movement. Steps: Steps taken(1-100); speed: "
-                           "Movement speed(500-1500, lower is faster); amount: Movement amplitude(0-170 degrees)",
-                           PropertyList({Property("steps", kPropertyTypeInteger, 3, 1, 100),
-                                         Property("speed", kPropertyTypeInteger, 1000, 500, 1500),
-                                         Property("amount", kPropertyTypeInteger, 20, 0, 170)}),
-                           [this](const PropertyList& properties) -> ReturnValue {
-                               int steps = properties["steps"].value<int>();
-                               int speed = properties["speed"].value<int>();
-                               int amount = properties["amount"].value<int>();
-                               QueueAction(ACTION_UPDOWN, steps, speed, 0, amount);
-                               return true;
-                           });
-
-        mcp_server.AddTool("self.otto.whirlwind_leg",
-                           "Whirlwind leg."
-                           "steps: Number of actions (3-100); speed: Action speed (100-1000, lower is faster, recommended 300); "
-                           "amplitude: Kicking amplitude (20-40 degrees)",
-                           PropertyList({Property("steps", kPropertyTypeInteger, 3, 3, 100),
-                                         Property("speed", kPropertyTypeInteger, 300, 100, 1000),
-                                         Property("amplitude", kPropertyTypeInteger, 30, 20, 40)}),
-                           [this](const PropertyList& properties) -> ReturnValue {
-                               int steps = properties["steps"].value<int>();
-                               int speed = properties["speed"].value<int>();
-                               int amplitude = properties["amplitude"].value<int>();
-                               QueueAction(ACTION_WHIRLWIND_LEG, steps, speed, 0, amplitude);
-                               return true;
-                           });
-
-        // 手部动作（仅在有手部舵机时可用）
-        if (has_hands_) {
-            mcp_server.AddTool(
-                "self.otto.hands_up",
-                "Hands up. Speed: Speed(500-1500, lower is faster); direction: Hand selection(1=left hand, "
-                "-1=right hand, 0=both hands)",
-                PropertyList({Property("speed", kPropertyTypeInteger, 1000, 500, 1500),
-                              Property("direction", kPropertyTypeInteger, 1, -1, 1)}),
-                [this](const PropertyList& properties) -> ReturnValue {
-                    int speed = properties["speed"].value<int>();
-                    int direction = properties["direction"].value<int>();
-                    QueueAction(ACTION_HANDS_UP, 1, speed, direction, 0);
-                    return true;
-                });
-
-            mcp_server.AddTool(
-                "self.otto.hands_down",
-                "Hands down. Speed: Speed(500-1500, lower is faster); direction: Hand selection(1=left hand, "
-                "-1=right hand, 0=both hands)",
-                PropertyList({Property("speed", kPropertyTypeInteger, 1000, 500, 1500),
-                              Property("direction", kPropertyTypeInteger, 1, -1, 1)}),
-                [this](const PropertyList& properties) -> ReturnValue {
-                    int speed = properties["speed"].value<int>();
-                    int direction = properties["direction"].value<int>();
-                    QueueAction(ACTION_HANDS_DOWN, 1, speed, direction, 0);
-                    return true;
-                });
-
-            mcp_server.AddTool(
-                "self.otto.hand_wave",
-                "Wave hand. direction: Hand selection (1=left hand, -1=right hand, 0=both hands)",
-                PropertyList({Property("direction", kPropertyTypeInteger, 1, -1, 1)}),
-                [this](const PropertyList& properties) -> ReturnValue {
-                    int direction = properties["direction"].value<int>();   
-                    QueueAction(ACTION_HAND_WAVE, 1, 0, 0, direction);
-                    return true;
-                });   
-
-            mcp_server.AddTool(
-                "self.otto.windmill",
-                "Windmill. steps: Number of actions (3-100); "
-                "speed: Action period (300-2000 ms, lower is faster); amplitude: Oscillation amplitude (50-90 degrees)",
-                PropertyList({Property("steps", kPropertyTypeInteger, 6, 3, 100),
-                              Property("speed", kPropertyTypeInteger, 500, 300, 2000),
-                              Property("amplitude", kPropertyTypeInteger, 70, 50, 90)}),
-                [this](const PropertyList& properties) -> ReturnValue {
-                    int steps = properties["steps"].value<int>();
-                    int speed = properties["speed"].value<int>();
-                    int amplitude = properties["amplitude"].value<int>();
-                    QueueAction(ACTION_WINDMILL, steps, speed, 0, amplitude);
-                    return true;
-                });
-
-            mcp_server.AddTool(
-                "self.otto.takeoff",
-                "Take off. Both hands at 90 degrees position, oscillating in phase to simulate take-off action. steps: Number of actions (5-100); "
-                "speed: Action period (200-600 ms, lower is faster, recommended 300); amplitude: Oscillation amplitude (20-60 degrees)",
-                PropertyList({Property("steps", kPropertyTypeInteger, 5, 5, 100),
-                              Property("speed", kPropertyTypeInteger, 300, 200, 600),
-                              Property("amplitude", kPropertyTypeInteger, 40, 20, 60)}),
-                [this](const PropertyList& properties) -> ReturnValue {
-                    int steps = properties["steps"].value<int>();
-                    int speed = properties["speed"].value<int>();
-                    int amplitude = properties["amplitude"].value<int>();
-                    QueueAction(ACTION_TAKEOFF, steps, speed, 0, amplitude);
-                    return true;
-                });
-
-            mcp_server.AddTool(
-                "self.otto.fitness",
-                "Fitness. steps: Number of actions (3-100); speed: Action speed (500-2000 ms, lower is faster); amplitude: Oscillation amplitude (10-50 degrees)",
-                PropertyList({Property("steps", kPropertyTypeInteger, 5, 3, 100),
-                              Property("speed", kPropertyTypeInteger, 1000, 500, 2000),
-                              Property("amplitude", kPropertyTypeInteger, 25, 10, 50)}),
-                [this](const PropertyList& properties) -> ReturnValue {
-                    int steps = properties["steps"].value<int>();
-                    int speed = properties["speed"].value<int>();
-                    int amplitude = properties["amplitude"].value<int>();
-                    QueueAction(ACTION_FITNESS, steps, speed, 0, amplitude);
-                    return true;
-                });
-
-            mcp_server.AddTool(
-                "self.otto.greeting",
-                "Wave hello. direction: Hand selection (1=left hand, -1=right hand); steps: Number of actions (3-100)",
-                PropertyList({Property("direction", kPropertyTypeInteger, 1, -1, 1),
-                              Property("steps", kPropertyTypeInteger, 5, 3, 100)}),
-                [this](const PropertyList& properties) -> ReturnValue {
-                    int direction = properties["direction"].value<int>();
-                    int steps = properties["steps"].value<int>();
-                    QueueAction(ACTION_GREETING, steps, 0, direction, 0);
-                    return true;
-                });
-
-            mcp_server.AddTool(
-                "self.otto.shy",
-                "Shy. direction: Direction (1=left, -1=right); steps: Number of actions (3-100)",
-                PropertyList({Property("direction", kPropertyTypeInteger, 1, -1, 1),
-                              Property("steps", kPropertyTypeInteger, 5, 3, 100)}),
-                [this](const PropertyList& properties) -> ReturnValue {
-                    int direction = properties["direction"].value<int>();
-                    int steps = properties["steps"].value<int>();
-                    QueueAction(ACTION_SHY, steps, 0, direction, 0);
-                    return true;
-                });
-
-            mcp_server.AddTool("self.otto.radio_calisthenics",
-                               "Radio calisthenics. No parameters required.",
-                               PropertyList(),
-                               [this](const PropertyList& properties) -> ReturnValue {
+                               // 基础移动动作
+                               if (action == "walk") {
+                                   QueueAction(ACTION_WALK, steps, speed, direction, arm_swing);
+                                   return true;
+                               } else if (action == "turn") {
+                                   QueueAction(ACTION_TURN, steps, speed, direction, arm_swing);
+                                   return true;
+                               } else if (action == "jump") {
+                                   QueueAction(ACTION_JUMP, steps, speed, 0, 0);
+                                   return true;
+                               } else if (action == "swing") {
+                                   QueueAction(ACTION_SWING, steps, speed, 0, amount);
+                                   return true;
+                               } else if (action == "moonwalk") {
+                                   QueueAction(ACTION_MOONWALK, steps, speed, direction, amount);
+                                   return true;
+                               } else if (action == "bend") {
+                                   QueueAction(ACTION_BEND, steps, speed, direction, 0);
+                                   return true;
+                               } else if (action == "shake_leg") {
+                                   QueueAction(ACTION_SHAKE_LEG, steps, speed, direction, 0);
+                                   return true;
+                               } else if (action == "updown") {
+                                   QueueAction(ACTION_UPDOWN, steps, speed, 0, amount);
+                                   return true;
+                               } else if (action == "whirlwind_leg") {
+                                   QueueAction(ACTION_WHIRLWIND_LEG, steps, speed, 0, amount);
+                                   return true;
+                               }
+                               // 固定动作
+                               else if (action == "sit") {
+                                   QueueAction(ACTION_SIT, 1, 0, 0, 0);
+                                   return true;
+                               } else if (action == "showcase") {
+                                   QueueAction(ACTION_SHOWCASE, 1, 0, 0, 0);
+                                   return true;
+                               } else if (action == "home") {
+                                   QueueAction(ACTION_HOME, 1, 1000, 1, 0);
+                                   return true;
+                               }
+                               // 手部动作
+                               else if (action == "hands_up") {
+                                   if (!has_hands_) {
+                                       return "错误：此动作需要手部舵机支持";
+                                   }
+                                   QueueAction(ACTION_HANDS_UP, 1, speed, direction, 0);
+                                   return true;
+                               } else if (action == "hands_down") {
+                                   if (!has_hands_) {
+                                       return "错误：此动作需要手部舵机支持";
+                                   }
+                                   QueueAction(ACTION_HANDS_DOWN, 1, speed, direction, 0);
+                                   return true;
+                               } else if (action == "hand_wave") {
+                                   if (!has_hands_) {
+                                       return "错误：此动作需要手部舵机支持";
+                                   }
+                                   QueueAction(ACTION_HAND_WAVE, 1, 0, 0, direction);
+                                   return true;
+                               } else if (action == "windmill") {
+                                   if (!has_hands_) {
+                                       return "错误：此动作需要手部舵机支持";
+                                   }
+                                   QueueAction(ACTION_WINDMILL, steps, speed, 0, amount);
+                                   return true;
+                               } else if (action == "takeoff") {
+                                   if (!has_hands_) {
+                                       return "错误：此动作需要手部舵机支持";
+                                   }
+                                   QueueAction(ACTION_TAKEOFF, steps, speed, 0, amount);
+                                   return true;
+                               } else if (action == "fitness") {
+                                   if (!has_hands_) {
+                                       return "错误：此动作需要手部舵机支持";
+                                   }
+                                   QueueAction(ACTION_FITNESS, steps, speed, 0, amount);
+                                   return true;
+                               } else if (action == "greeting") {
+                                   if (!has_hands_) {
+                                       return "错误：此动作需要手部舵机支持";
+                                   }
+                                   QueueAction(ACTION_GREETING, steps, 0, direction, 0);
+                                   return true;
+                               } else if (action == "shy") {
+                                   if (!has_hands_) {
+                                       return "错误：此动作需要手部舵机支持";
+                                   }
+                                   QueueAction(ACTION_SHY, steps, 0, direction, 0);
+                                   return true;
+                               } else if (action == "radio_calisthenics") {
+                                   if (!has_hands_) {
+                                       return "错误：此动作需要手部舵机支持";
+                                   }
                                    QueueAction(ACTION_RADIO_CALISTHENICS, 1, 0, 0, 0);
                                    return true;
-                               });
-
-            mcp_server.AddTool("self.otto.magic_circle",
-                               "Magic circle of love. No parameters required.",
-                               PropertyList(),
-                               [this](const PropertyList& properties) -> ReturnValue {
+                               } else if (action == "magic_circle") {
+                                   if (!has_hands_) {
+                                       return "错误：此动作需要手部舵机支持";
+                                   }
                                    QueueAction(ACTION_MAGIC_CIRCLE, 1, 0, 0, 0);
                                    return true;
-                               });
-        }
+                               } else {
+                                   return "错误：无效的动作名称。可用动作：walk, turn, jump, swing, moonwalk, bend, shake_leg, updown, whirlwind_leg, sit, showcase, home, hands_up, hands_down, hand_wave, windmill, takeoff, fitness, greeting, shy, radio_calisthenics, magic_circle";
+                               }
+                           });
+
 
         // 舵机序列工具（支持分段发送，每次发送一个序列，自动排队执行）
         mcp_server.AddTool(
             "self.otto.servo_sequences",
-            "Control each servo to achieve autonomous action programming. Supports segmented sending sequences: AI can continuously call this tool multiple times, each time sending a short sequence, and the system will automatically queue and execute them in order. Supports both normal movement and oscillator modes."
-            "Robot structure: Both hands can swing up and down, both legs can retract and extend, and both feet can flip up and down."
-            "Servo description:"
-            "ll(Left leg): Adduction and abduction, 0 degrees = fully abducted, 90 degrees = neutral, 180 degrees = fully adducted;"
-            "rl(Right leg): Adduction and abduction, 0 degrees = fully adducted, 90 degrees = neutral, 180 degrees = fully abducted;"
-            "lf(Left foot): Up and down flipping, 0 degrees = fully up, 90 degrees = horizontal, 180 degrees = fully down;"
-            "rf(Right foot): Up and down flipping, 0 degrees = fully down, 90 degrees = horizontal, 180 degrees = fully up;"
-            "lh(Left hand): Up and down swinging, 0 degrees = fully down, 90 degrees = horizontal, 180 degrees = fully up;"
-            "rh(Right hand): Up and down swinging, 0 degrees = fully up, 90 degrees = horizontal, 180 degrees = fully down;"
-            "sequence: Single sequence object, containing an 'a' action array, with optional top-level parameters:"
-            "'d' (delay in milliseconds after the sequence is completed, used for pauses between sequences)."
+            "AI custom action programming (improvisational action). Supports sending sequences in segments: for more than 5 sequences, it is recommended that the AI can call this tool multiple times in a row. Each time a short sequence is sent, the system will automatically queue it for execution in order. Supports two modes: normal movement and oscillator."
+            "Robot structure: The hands can swing up and down, the legs can be retracted and abducted, and the feet can be flipped up and down."
+            "Servo gear description:"
+            "ll (left leg): adduction and abduction, 0 degrees = full abduction, 90 degrees = neutral, 180 degrees = full adduction;"
+            "rl (right leg): adduction and abduction, 0 degrees = full adduction, 90 degrees = neutral, 180 degrees = full abduction;"
+            "lf (left foot): flip up and down, 0 degrees = completely upward, 90 degrees = horizontal, 180 degrees = completely downward;"
+            "rf (right foot): flip up and down, 0 degrees = completely downward, 90 degrees = horizontal, 180 degrees = completely upward;"
+            "lh (left hand): swing up and down, 0 degrees = completely downward, 90 degrees = horizontal, 180 degrees = completely upward;"
+            "rh (right hand): swing up and down, 0 degrees = completely upward, 90 degrees = horizontal, 180 degrees = completely downward;"
+            "sequence: a single sequence object, containing the 'a' action array, top-level optional parameters:"
+            "'d' (delay in milliseconds after sequence execution completes, used for pauses between sequences)."
             "Each action object contains:"
-            "Normal mode: 's' servo position object (key names: ll/rl/lf/rf/lh/rh, values: 0-180 degrees), 'v' movement speed 100-3000 milliseconds (default 1000), 'd' action delay in milliseconds (default 0);"
-            "Oscillator mode: 'osc' oscillator object, containing 'a' amplitude object (each servo amplitude 10-90 degrees, default 20 degrees), 'o' center angle object (each servo oscillation center absolute angle 0-180 degrees, default 90 degrees), 'ph' phase difference object (each servo phase difference, degrees, 0-360 degrees, default 0 degrees), 'p' period 100-3000 milliseconds (default 500), 'c' number of cycles 0.1-20.0 (default 5.0);"
-            "Usage method: AI can continuously call this tool multiple times, each time sending a sequence, and the system will automatically queue and execute them in order."
-            "Important note: When the left and right legs and feet are oscillating, one foot must be at 90 degrees, otherwise the robot will be damaged. If multiple sequences are sent (number of sequences > 1), when all sequences are completed and need to be reset, AI should finally call the self.otto.home tool separately for reset, and should not set the reset parameter in the sequence."
-            "Example: Send 3 sequences, and finally call reset:"
-            "1st call{\"sequence\":\"{\\\"a\\\":[{\\\"s\\\":{\\\"ll\\\":100},\\\"v\\\":1000}],\\\"d\\\":500}\"},"
-            "2nd call{\"sequence\":\"{\\\"a\\\":[{\\\"s\\\":{\\\"ll\\\":90},\\\"v\\\":800}],\\\"d\\\":500}\"},"
-            "3rd call{\"sequence\":\"{\\\"a\\\":[{\\\"s\\\":{\\\"ll\\\":80},\\\"v\\\":800}]}\"},"
-            "Finally call the self.otto.home tool for reset.",
+            "Normal mode: 's' servo position object (key name: ll/rl/lf/rf/lh/rh, value: 0-180 degrees), 'v' movement speed 100-3000 milliseconds (default 1000), 'd' delay milliseconds after action (default 0);"
+            "Oscillation mode: 'osc' oscillator object, including 'a' amplitude object (amplitude of each servo 10-90 degrees, default 20 degrees), 'o' center angle object (absolute angle of oscillation center of each servo 0-180 degrees, default 90 degrees) ), 'ph' phase difference object (phase difference of each servo, degrees, 0-360 degrees, default 0 degrees), 'p' period 100-3000 milliseconds (default 500), 'c' period number 0.1-20.0 (default 5.0); "
+            "How to use: AI can call this tool multiple times in a row. Each time a sequence is sent, the system will automatically queue it and execute it in sequence."
+            "Important note: When the left and right legs vibrate, one foot must be at 90 degrees, otherwise the robot will be damaged. If multiple sequences are sent (sequence number > 1), and when a reset is required after completing all sequences, the AI should finally call the self.otto.home tool to reset alone. Do not set reset parameters in the sequence."
+            "Normal mode example: send 3 sequences and finally call reset:"
+            "The first call {\"sequence\":\"{\\\"a\\\":[{\\\"s\\\":{\\\"ll\\\":100},\\\"v\\\":1000}],\\\"d\\\":500}\"},"
+            "The second call {\"sequence\":\"{\\\"a\\\":[{\\\"s\\\":{\\\"ll\\\":90},\\\"v\\\":800}],\\\"d\\\":500}\"},"
+            "The third call {\"sequence\":\"{\\\"a\\\":[{\\\"s\\\":{\\\"ll\\\":80},\\\"v\\\":800}]}\"},"
+            "Finally call the self.otto.home tool to reset."
+            "Oscillator mode example:"
+            "Example 1 - Arms swing synchronously: {\"sequence\":\"{\\\"a\\\":[{\\\"osc\\\":{\\\"a\\\":{\\\"lh\\\":30,\\\"rh\\\":3 0},\\\"o\\\":{\\\"lh\\\":90,\\\"rh\\\":-90},\\\"p\\\":500,\\\"c\\\":5.0}}],\\\"d\\\":0}\"};"
+            "Example 2 - Legs oscillate alternately (wave effect): {\"sequence\":\"{\\\"a\\\":[{\\\"osc\\\":{\\\"a\\\":{\\\"ll\\\":20,\\\"rl\\\":20},\\\"o\\\ ":{\\"ll\\\":90,\\\"rl\\\":-90},\\\"ph\\\":{\\\"rl\\\":180},\\\"p\\\":600,\\\"c\\\":3.0}}],\\\"d\\\":0}\"};"
+            "Example 3 - Single leg oscillation with fixed feet (safety): {\"sequence\":\"{\\\"a\\\":[{\\\"osc\\\":{\\\"a\\\":{\\\"ll\\\":45}, \\\"o\\\":{\\\"ll\\\":90,\\\"lf\\\":90},\\\"p\\\":400,\\\"c\\\":4.0}}],\\\"d\\\":0}\"};"
+            "Example 4 - Complex multi-servo oscillation (hands and legs): {\"sequence\":\"{\\\"a\\\":[{\\\"osc\\\":{\\\"a \\\":{\\\"lh\\\":25,\\\"rh\\\":25,\\\"ll\\\":15},\\\"o\\\":{\\\"l h\\\":90,\\\"rh\\\":90,\\\"ll\\\":90,\\\"lf\\\":90},\\\"ph\\\":{\ \\"rh\\\":180},\\\"p\\\":800,\\\"c\\\":6.0}}],\\\"d\\\":500}\"};"
+            "Example 5 - Quick swing: {\"sequence\":\"{\\\"a\\\":[{\\\"osc\\\":{\\\"a\\\":{\\\"ll\\\":30,\\\"rl\\\":30},\\\"o\\\":{\\ \"ll\\\":90,\\\"rl\\\":90},\\\"ph\\\":{\\\"rl\\\":180},\\\"p\\\":300,\\\"c\\\":10.0}}],\\\"d\\\":0}\"}.",
             PropertyList({Property("sequence", kPropertyTypeString,
                                    "{\"a\":[{\"s\":{\"ll\":90,\"rl\":90},\"v\":1000}]}")}),
             [this](const PropertyList &properties) -> ReturnValue
@@ -835,12 +704,6 @@ public:
                 return true;
             });
 
-        // System Tools
-        mcp_server.AddTool("self.otto.home", "Reset the robot to the initial position", PropertyList(),
-                           [this](const PropertyList& properties) -> ReturnValue {
-                               QueueAction(ACTION_HOME, 1, 1000, 1, 0);
-                               return true;
-                           });
 
         mcp_server.AddTool("self.otto.stop", "Immediately stop all actions and reset", PropertyList(),
                            [this](const PropertyList& properties) -> ReturnValue {
